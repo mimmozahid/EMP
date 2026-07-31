@@ -77,7 +77,11 @@ def get_database_config():
             connect_args['ssl'] = {'ssl_mode': 'VERIFY_IDENTITY'}
 
     if not db_url:
-        db_file = os.path.join(app.root_path, 'employee_system.db')
+        is_vercel = bool(os.environ.get('VERCEL'))
+        if is_vercel or not os.access(app.root_path, os.W_OK):
+            db_file = '/tmp/employee_system.db'
+        else:
+            db_file = os.path.join(app.root_path, 'employee_system.db')
         db_url = f"sqlite:///{db_file}"
         print(f"Using local SQLite database: {db_file}")
     else:
