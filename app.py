@@ -19,26 +19,16 @@ tidb_port = os.environ.get('TIDB_PORT', '4000')
 
 db_url = os.environ.get('DATABASE_URL')
 
-# Construct TiDB URL if individual credentials exist
 if not db_url and tidb_host and tidb_user and tidb_password and tidb_database:
     ssl_ca = os.environ.get('TIDB_SSL_CA')
-    if ssl_ca:
-        ssl_args = f"?ssl_ca={ssl_ca}&ssl_verify_cert=true"
-    else:
-        # Standard TiDB Cloud Serverless SSL flags for PyMySQL
-        ssl_args = "?ssl_verify_cert=true&ssl_verify_identity=true"
-        
-    db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_args}"
+    ssl_query = f"?ssl_ca={ssl_ca}" if ssl_ca else ""
+    db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_query}"
 
-# Fallback to SQLite if no MySQL config is present
 if not db_url:
-    if os.environ.get('VERCEL'):
-        db_file = '/tmp/employee_system.db'
-    else:
-        db_file = os.path.join(app.root_path, 'employee_system.db')
-        
+    # Local fallback sqlite database
+    db_file = os.path.join(app.root_path, 'employee_system.db')
     db_url = f"sqlite:///{db_file}"
-    print(f"Using SQLite database: {db_file}")
+    print(f"Using local SQLite database: {db_file}")
 else:
     print("Using TiDB MySQL database connection.")
 
@@ -54,16 +44,9 @@ from seed import seed_database
 
 db.init_app(app)
 
-# Initialize database safely on startup
-# Initialize database tables without repeatedly wiping/re-seeding
+# Initialize database and seed data
 with app.app_context():
-    try:
-        db.create_all()
-        # Seed only on local SQLite startup or if explicitly needed
-        if not os.environ.get('VERCEL'):
-            seed_database(app)
-    except Exception as e:
-        print(f"Database initialization warning: {e}")
+    seed_database(app)
 
 # Helper function to get present days for an employee
 def count_present_days(emp_id):
