@@ -69,25 +69,39 @@ def is_valid_email(email):
     return email.endswith('@gmail.com') or email.endswith('@diu.edu.bd')
 
 def get_failed_attempts(identifier):
-    record = LoginAttempt.query.get(str(identifier))
-    return record.attempts if record else 0
+    try:
+        record = LoginAttempt.query.get(str(identifier))
+        return record.attempts if record else 0
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error getting failed attempts: {e}")
+        return 0
 
 def increase_failed_attempts(identifier):
-    record = LoginAttempt.query.get(str(identifier))
-    if not record:
-        record = LoginAttempt(identifier=str(identifier), attempts=1, last_attempt=datetime.utcnow())
-        db.session.add(record)
-    else:
-        record.attempts += 1
-        record.last_attempt = datetime.utcnow()
-    db.session.commit()
-    return record.attempts
+    try:
+        record = LoginAttempt.query.get(str(identifier))
+        if not record:
+            record = LoginAttempt(identifier=str(identifier), attempts=1, last_attempt=datetime.utcnow())
+            db.session.add(record)
+        else:
+            record.attempts += 1
+            record.last_attempt = datetime.utcnow()
+        db.session.commit()
+        return record.attempts
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error increasing failed attempts: {e}")
+        return 1
 
 def reset_failed_attempts(identifier):
-    record = LoginAttempt.query.get(str(identifier))
-    if record:
-        record.attempts = 0
-        db.session.commit()
+    try:
+        record = LoginAttempt.query.get(str(identifier))
+        if record:
+            record.attempts = 0
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error resetting failed attempts: {e}")
 
 def log_activity(user_role, username, action, details=None):
     """Log user activity for live activity updates"""
@@ -104,3 +118,4 @@ def log_activity(user_role, username, action, details=None):
     except Exception as e:
         db.session.rollback()
         print(f"Error logging activity: {e}")
+

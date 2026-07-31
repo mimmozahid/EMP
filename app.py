@@ -11,29 +11,91 @@ app.secret_key = os.environ.get('SECRET_KEY', 'employee-system-secret-key-2026')
 # ---------------------------------------------------------------------------
 # Database Configuration (TiDB MySQL with SQLite Fallback)
 # ---------------------------------------------------------------------------
-tidb_host = os.environ.get('TIDB_HOST')
-tidb_user = os.environ.get('TIDB_USER')
-tidb_password = os.environ.get('TIDB_PASSWORD')
-tidb_database = os.environ.get('TIDB_DATABASE')
-tidb_port = os.environ.get('TIDB_PORT', '4000')
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
-db_url = os.environ.get('DATABASE_URL')
+def get_database_config():
+    db_url = os.environ.get('DATABASE_URL')
+    tidb_host = os.environ.get('TIDB_HOST')
+    tidb_user = os.environ.get('TIDB_USER')
+    tidb_password = os.environ.get('TIDB_PASSWORD')
+    tidb_database = os.environ.get('TIDB_DATABASE')
+    tidb_port = os.environ.get('TIDB_PORT', '4000')
 
-if not db_url and tidb_host and tidb_user and tidb_password and tidb_database:
-    ssl_ca = os.environ.get('TIDB_SSL_CA')
-    ssl_query = f"?ssl_ca={ssl_ca}" if ssl_ca else ""
-    db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_query}"
+    connect_args = {}
 
-if not db_url:
-    # Local fallback sqlite database
-    db_file = os.path.join(app.root_path, 'employee_system.db')
-    db_url = f"sqlite:///{db_file}"
-    print(f"Using local SQLite database: {db_file}")
-else:
-    print("Using TiDB MySQL database connection.")
+    if not db_url and tidb_host and tidb_user and tidb_password:
+        db_name = tidb_database.strip() if (tidb_database and tidb_database.strip() and tidb_database.strip() != 'sys') else 'test'
+        db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{db_name}"
+        ssl_ca = os.environ.get('TIDB_SSL_CA')
+        if ssl_ca:
+            connect_args['ssl'] = {'ca': ssl_ca}
+        else:
+            connect_args['ssl'] = {'ssl_mode': 'VERIFY_IDENTITY'}
 
+    elif db_url:
+        db_url = db_url.strip()
+        if db_url.startswith('mysql://'):
+            db_url = 'mysql+pymysql://' + db_url[len('mysql://'):]
+        elif db_url.startswith('postgres://'):
+            db_url = 'postgresql://' + db_url[len('postgres://'):]
+
+        parsed = urlparse(db_url)
+        query_params = parse_qs(parsed.query)
+
+        path = parsed.path
+        if path in ['', '/', '/sys']:
+            path = '/test'
+
+        new_query_params = {}
+        has_ssl = False
+        for k, v in query_params.items():
+            if k.lower() in ['ssl_mode', 'ssl-mode']:
+                has_ssl = True
+            elif k.lower() in ['ssl_ca', 'ssl-ca']:
+                if v and v[0]:
+                    connect_args['ssl'] = {'ca': v[0]}
+                has_ssl = True
+            elif k.lower() == 'ssl':
+                has_ssl = True
+            else:
+                new_query_params[k] = v
+
+        if has_ssl and 'ssl' not in connect_args:
+            connect_args['ssl'] = {'ssl_mode': 'VERIFY_IDENTITY'}
+
+        clean_query = urlencode(new_query_params, doseq=True)
+        db_url = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            path,
+            parsed.params,
+            clean_query,
+            parsed.fragment
+        ))
+
+        if 'mysql+pymysql' in db_url and 'ssl' not in connect_args and ('tidbcloud' in db_url or 'gateway' in db_url):
+            connect_args['ssl'] = {'ssl_mode': 'VERIFY_IDENTITY'}
+
+    if not db_url:
+        db_file = os.path.join(app.root_path, 'employee_system.db')
+        db_url = f"sqlite:///{db_file}"
+        print(f"Using local SQLite database: {db_file}")
+    else:
+        print("Using TiDB MySQL database connection.")
+
+    return db_url, connect_args
+
+db_url, connect_args = get_database_config()
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+engine_opts = {
+    'pool_recycle': 280,
+    'pool_pre_ping': True
+}
+if connect_args:
+    engine_opts['connect_args'] = connect_args
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_opts
 
 from models import db, AdminManager, Employee, Attendance, Leave, LoginAttempt, ActivityLog
 from auth import (
@@ -44,9 +106,12 @@ from seed import seed_database
 
 db.init_app(app)
 
-# Initialize database and seed data
+# Initialize database and seed data safely
 with app.app_context():
-    seed_database(app)
+    try:
+        seed_database(app)
+    except Exception as e:
+        print(f"Warning: Database seeding encountered an error: {e}")
 
 # Helper function to get present days for an employee
 def count_present_days(emp_id):
@@ -324,26 +389,31 @@ def api_admin_add_employee():
     if not is_strong:
         return jsonify({'success': False, 'message': msg}), 400
 
-    # Auto-generate Employee ID starting 1001 (matching generateEmployeeId in admin.c)
-    max_emp = db.session.query(db.func.max(Employee.id)).scalar()
-    new_id = (max_emp + 1) if max_emp and max_emp >= 1000 else 1001
+    try:
+        # Auto-generate Employee ID starting 1001 (matching generateEmployeeId in admin.c)
+        max_emp = db.session.query(db.func.max(Employee.id)).scalar()
+        new_id = (max_emp + 1) if max_emp and max_emp >= 1000 else 1001
 
-    new_emp = Employee(
-        id=new_id,
-        name=name,
-        email=email,
-        date_of_birth=dob,
-        position=position,
-        base_salary=base_salary,
-        password_hash=hash_password(raw_pwd),
-        bonus=0.0,
-        deduction=0.0
-    )
-    db.session.add(new_emp)
-    db.session.commit()
+        new_emp = Employee(
+            id=new_id,
+            name=name,
+            email=email,
+            date_of_birth=dob,
+            position=position,
+            base_salary=base_salary,
+            password_hash=hash_password(raw_pwd),
+            bonus=0.0,
+            deduction=0.0
+        )
+        db.session.add(new_emp)
+        db.session.commit()
 
-    log_activity('Admin', user['username'], 'Added Employee', f'Created employee #{new_id} ({name})')
-    return jsonify({'success': True, 'message': f'Employee added successfully with ID #{new_id}', 'emp_id': new_id})
+        log_activity('Admin', user['username'], 'Added Employee', f'Created employee #{new_id} ({name})')
+        return jsonify({'success': True, 'message': f'Employee added successfully with ID #{new_id}', 'emp_id': new_id})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error adding employee: {e}")
+        return jsonify({'success': False, 'message': f'Database error adding employee: {str(e)}'}), 500
 
 @app.route('/api/admin/employee/update', methods=['POST'])
 def api_admin_update_employee():
@@ -362,15 +432,20 @@ def api_admin_update_employee():
     if email and not is_valid_email(email):
         return jsonify({'success': False, 'message': 'Invalid email format.'}), 400
 
-    emp.name = data.get('name', emp.name).strip()
-    emp.email = email
-    emp.date_of_birth = data.get('date_of_birth', emp.date_of_birth).strip()
-    emp.position = data.get('position', emp.position).strip()
-    emp.base_salary = float(data.get('base_salary', emp.base_salary))
+    try:
+        emp.name = data.get('name', emp.name).strip()
+        emp.email = email
+        emp.date_of_birth = data.get('date_of_birth', emp.date_of_birth).strip()
+        emp.position = data.get('position', emp.position).strip()
+        emp.base_salary = float(data.get('base_salary', emp.base_salary))
 
-    db.session.commit()
-    log_activity('Admin', user['username'], 'Updated Employee', f'Updated records for employee #{emp_id}')
-    return jsonify({'success': True, 'message': 'Employee details updated successfully.'})
+        db.session.commit()
+        log_activity('Admin', user['username'], 'Updated Employee', f'Updated records for employee #{emp_id}')
+        return jsonify({'success': True, 'message': 'Employee details updated successfully.'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating employee: {e}")
+        return jsonify({'success': False, 'message': 'Database error updating employee.'}), 500
 
 @app.route('/api/admin/employee/delete', methods=['POST'])
 def api_admin_delete_employee():
