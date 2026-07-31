@@ -31,12 +31,33 @@ function showToast(message, type = 'info') {
 // Modal Helpers
 function openModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (modal) modal.classList.add('active');
+  if (modal) {
+    modal.classList.add('active');
+    // If it's a creation modal (not edit), reset form fields
+    if (!modalId.includes('edit')) {
+      const form = modal.querySelector('form');
+      if (form) {
+        form.reset();
+        // Force clear all inputs
+        form.querySelectorAll('input').forEach(input => {
+          if (input.type !== 'hidden' && input.type !== 'submit') {
+            input.value = '';
+          }
+        });
+      }
+    }
+  }
 }
 
 function closeModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    const form = modal.querySelector('form');
+    if (form && !modalId.includes('edit')) {
+      form.reset();
+    }
+  }
 }
 
 // Role Tab Switching for Dashboard Panels
