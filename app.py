@@ -19,13 +19,19 @@ tidb_port = os.environ.get('TIDB_PORT', '4000')
 
 db_url = os.environ.get('DATABASE_URL')
 
+# Construct TiDB URL if individual credentials exist
 if not db_url and tidb_host and tidb_user and tidb_password and tidb_database:
     ssl_ca = os.environ.get('TIDB_SSL_CA')
-    ssl_query = f"?ssl_ca={ssl_ca}" if ssl_ca else ""
-    db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_query}"
+    if ssl_ca:
+        ssl_args = f"?ssl_ca={ssl_ca}&ssl_verify_cert=true"
+    else:
+        # Standard TiDB Cloud Serverless SSL flags for PyMySQL
+        ssl_args = "?ssl_verify_cert=true&ssl_verify_identity=true"
+        
+    db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_args}"
 
+# Fallback to SQLite if no MySQL config is present
 if not db_url:
-    # Use writable /tmp directory on Vercel/serverless environments
     if os.environ.get('VERCEL'):
         db_file = '/tmp/employee_system.db'
     else:
@@ -49,10 +55,13 @@ from seed import seed_database
 db.init_app(app)
 
 # Initialize database safely on startup
+# Initialize database tables without repeatedly wiping/re-seeding
 with app.app_context():
     try:
         db.create_all()
-        seed_database(app)
+        # Seed only on local SQLite startup or if explicitly needed
+        if not os.environ.get('VERCEL'):
+            seed_database(app)
     except Exception as e:
         print(f"Database initialization warning: {e}")
 
