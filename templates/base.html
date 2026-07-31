@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Employee Management System{% endblock %}</title>
+  
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Main Glassmorphism CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="brand-logo">
+      <i class="fas fa-layer-group"></i> EMS NEXUS
+    </div>
+    
+    {% if session.user_id %}
+    <div class="nav-user">
+      <div class="user-badge {% if session.role == 1 %}badge-role-admin{% elif session.role == 2 %}badge-role-manager{% else %}badge-role-employee{% endif %}">
+        <i class="fas {% if session.role == 1 %}fa-shield-halved{% elif session.role == 2 %}fa-user-tie{% else %}fa-id-badge{% endif %}"></i>
+        <span>{{ session.username }}</span>
+      </div>
+      <a href="{{ url_for('logout') }}" class="btn-logout">
+        <i class="fas fa-sign-out-alt"></i> Logout
+      </a>
+    </div>
+    {% endif %}
+  </nav>
+
+  <!-- Main Content Body -->
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Shared Change Password Modal (if logged in) -->
+  {% if session.user_id %}
+  <div id="modal-change-password" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3><i class="fas fa-key"></i> Change Password</h3>
+        <button class="modal-close" onclick="closeModal('modal-change-password')">&times;</button>
+      </div>
+      <form id="form-change-password" onsubmit="submitChangePassword(event)">
+        <div class="form-group">
+          <label>Current Password</label>
+          <input type="password" id="cp-current" class="form-control" required placeholder="Enter current password">
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" id="cp-new" class="form-control" required placeholder="Min 8 chars, upper, lower, digit, special">
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <input type="password" id="cp-confirm" class="form-control" required placeholder="Confirm new password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Update Password</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Core JavaScript -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    function submitChangePassword(e) {
+      e.preventDefault();
+      const current = document.getElementById('cp-current').value.trim();
+      const newP = document.getElementById('cp-new').value.trim();
+      const confirmP = document.getElementById('cp-confirm').value.trim();
+
+      if (newP !== confirmP) {
+        showToast("New passwords do not match.", "error");
+        return;
+      }
+
+      fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: current,
+          new_password: newP
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showToast(data.message, "success");
+          closeModal('modal-change-password');
+          document.getElementById('form-change-password').reset();
+        } else {
+          showToast(data.message, "error");
+        }
+      });
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

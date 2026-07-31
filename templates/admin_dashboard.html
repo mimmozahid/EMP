@@ -1,0 +1,774 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - EMS NEXUS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <h1><i class="fas fa-shield-halved" style="color: var(--role-admin);"></i> Administrator Portal</h1>
+    <p>Welcome back, {{ user.username }}. Full system control & live employee activity stream.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    <button class="btn btn-primary" onclick="openModal('modal-add-employee')">
+      <i class="fas fa-user-plus"></i> Add Employee
+    </button>
+    <button class="btn btn-secondary" onclick="openModal('modal-add-user')">
+      <i class="fas fa-user-shield"></i> Add Admin/Manager
+    </button>
+    <button class="btn btn-secondary" onclick="openModal('modal-change-password')">
+      <i class="fas fa-key"></i> Change Password
+    </button>
+  </div>
+</div>
+
+<!-- Stat Grid -->
+<div class="stat-grid">
+  <div class="glass-card stat-card">
+    <div class="stat-icon purple"><i class="fas fa-users"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-total-employees">0</div>
+      <div class="stat-label">Total Employees</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon emerald"><i class="fas fa-user-check"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-present-today">0</div>
+      <div class="stat-label">Present Today</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-pending-leaves">0</div>
+      <div class="stat-label">Pending Leaves</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon cyan"><i class="fas fa-file-invoice-dollar"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="stat-total-payroll">$0.00</div>
+      <div class="stat-label">Est. Total Payroll</div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Activity Updates Stream Box -->
+<div class="live-stream-box">
+  <div class="live-header">
+    <div class="live-indicator">
+      <div class="pulse-dot"></div>
+      <span>Live Employee Activities & Data Stream</span>
+    </div>
+    <span style="font-size: 0.75rem; color: var(--text-muted);"><i class="fas fa-sync fa-spin"></i> Auto-refreshing every 3s</span>
+  </div>
+  <div id="live-updates-list" class="live-list">
+    <div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem;">Initializing live stream monitor...</div>
+  </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-container">
+  <button class="tab-btn active" onclick="switchTab('tab-employees', this)">
+    <i class="fas fa-users-gear"></i> Employee Records
+  </button>
+  <button class="tab-btn" onclick="switchTab('tab-attendance', this); loadAttendanceSheet();">
+    <i class="fas fa-calendar-check"></i> Record Attendance
+  </button>
+  <button class="tab-btn" onclick="switchTab('tab-payroll', this)">
+    <i class="fas fa-calculator"></i> Payroll Processing
+  </button>
+  <button class="tab-btn" onclick="switchTab('tab-leaves', this)">
+    <i class="fas fa-plane-departure"></i> Leave Applications
+  </button>
+</div>
+
+<!-- TAB 1: Employee Records & CRUD -->
+<div id="tab-employees" class="tab-content active">
+  <div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3><i class="fas fa-list"></i> Employee Master Directory</h3>
+      <input type="text" id="employee-search-input" class="form-control" style="width: 250px;" placeholder="Search employee..." onkeyup="filterEmployeeTable()">
+    </div>
+
+    <div class="table-responsive">
+      <table class="custom-table" id="table-employees">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Position</th>
+            <th>Base Salary</th>
+            <th>Bonus</th>
+            <th>Deduction</th>
+            <th>Present Days</th>
+            <th>Net Salary</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-employees">
+          <tr><td colspan="10" style="text-align:center;">Loading employee records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: Automated Attendance Sheet for Today / Any Date -->
+<div id="tab-attendance" class="tab-content">
+  <div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+      <div>
+        <h3><i class="fas fa-clipboard-user"></i> Employee Attendance Marker Sheet</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">Automatically list all employees for inputting attendance for today or any selected date</p>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <label style="font-weight: 600; font-size: 0.9rem;">Date:</label>
+        <input type="text" id="att-sheet-date" class="form-control" style="width: 150px;" placeholder="DD/MM/YYYY">
+        <button class="btn btn-secondary btn-sm" onclick="loadAttendanceSheet()">
+          <i class="fas fa-rotate"></i> Load Date
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Actions Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 0.75rem 1rem; border-radius: 10px; margin-bottom: 1rem;">
+      <div style="font-size: 0.9rem; font-weight: 600;" id="sheet-summary-txt">
+        Showing all existing employees
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-sm btn-success" onclick="markAllAttendance(1)">
+          <i class="fas fa-check-double"></i> Mark All Present
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="markAllAttendance(0)">
+          <i class="fas fa-times-circle"></i> Mark All Absent
+        </button>
+      </div>
+    </div>
+
+    <!-- Interactive Attendance Sheet Table -->
+    <form onsubmit="submitBatchAttendance(event)">
+      <div class="table-responsive">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>Emp ID</th>
+              <th>Employee Name</th>
+              <th>Job Position</th>
+              <th>Status for Selected Date</th>
+              <th>Input Attendance</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-attendance-sheet">
+            <tr><td colspan="5" style="text-align:center;">Loading employee list...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 1.5rem; text-align: right;">
+        <button type="submit" class="btn btn-primary" style="padding: 0.85rem 2rem;">
+          <i class="fas fa-floppy-disk"></i> Save Attendance Sheet
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<!-- TAB 3: Payroll Processing -->
+<div id="tab-payroll" class="tab-content">
+  <div class="glass-card">
+    <h3><i class="fas fa-file-invoice-dollar"></i> Payroll Engine</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">
+      Formula: <code>Final Salary = (Base Salary / 30 * Present Days) + Bonus - Deduction</code>
+    </p>
+
+    <div class="table-responsive">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Emp ID</th>
+            <th>Name</th>
+            <th>Position</th>
+            <th>Base Salary</th>
+            <th>Present Days</th>
+            <th>Bonus</th>
+            <th>Deduction</th>
+            <th>Calculated Net Salary</th>
+            <th>Manage Adjustments</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-payroll">
+          <tr><td colspan="9" style="text-align:center;">Loading payroll calculation data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 4: Leave Requests -->
+<div id="tab-leaves" class="tab-content">
+  <div class="glass-card">
+    <h3><i class="fas fa-umbrella-beach"></i> Employee Leave Requests</h3>
+    <div class="table-responsive" style="margin-top: 1rem;">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Apply Date</th>
+            <th>Employee</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-admin-leaves">
+          <tr><td colspan="7" style="text-align:center;">Loading leave requests...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add Employee -->
+<div id="modal-add-employee" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><i class="fas fa-user-plus"></i> Add New Employee</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-employee')">&times;</button>
+    </div>
+    <form onsubmit="submitAddEmployee(event)">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="add-emp-name" class="form-control" required placeholder="e.g. John Doe">
+      </div>
+      <div class="form-group">
+        <label>Email (must end with @gmail.com or @diu.edu.bd)</label>
+        <input type="email" id="add-emp-email" class="form-control" required placeholder="name@gmail.com">
+      </div>
+      <div class="form-group">
+        <label>Date of Birth (DD/MM/YYYY)</label>
+        <input type="text" id="add-emp-dob" class="form-control" required placeholder="12/01/2000">
+      </div>
+      <div class="form-group">
+        <label>Job Position</label>
+        <input type="text" id="add-emp-pos" class="form-control" required placeholder="Software Engineer">
+      </div>
+      <div class="form-group">
+        <label>Base Salary ($)</label>
+        <input type="number" step="0.01" id="add-emp-salary" class="form-control" required placeholder="40000">
+      </div>
+      <div class="form-group">
+        <label>Set Initial Password</label>
+        <input type="password" id="add-emp-password" class="form-control" required placeholder="Strong password (>8 chars, A-z, 0-9, @#$)">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Create Employee Account</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: Edit Employee -->
+<div id="modal-edit-employee" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><i class="fas fa-user-pen"></i> Update Employee Record</h3>
+      <button class="modal-close" onclick="closeModal('modal-edit-employee')">&times;</button>
+    </div>
+    <form onsubmit="submitUpdateEmployee(event)">
+      <input type="hidden" id="edit-emp-id">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="edit-emp-name" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="edit-emp-email" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Date of Birth</label>
+        <input type="text" id="edit-emp-dob" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Position</label>
+        <input type="text" id="edit-emp-pos" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Base Salary ($)</label>
+        <input type="number" step="0.01" id="edit-emp-salary" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Save Changes</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: Add Bonus / Deduction -->
+<div id="modal-adjust-payroll" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="adjust-modal-title"><i class="fas fa-plus-circle"></i> Add Adjustment</h3>
+      <button class="modal-close" onclick="closeModal('modal-adjust-payroll')">&times;</button>
+    </div>
+    <form onsubmit="submitPayrollAdjustment(event)">
+      <input type="hidden" id="adjust-emp-id">
+      <input type="hidden" id="adjust-type"> <!-- 'bonus' or 'deduction' -->
+      <div class="form-group">
+        <label id="adjust-label">Amount ($)</label>
+        <input type="number" step="0.01" id="adjust-amount" class="form-control" required placeholder="0.00">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Apply Adjustment</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: Add Admin/Manager Account -->
+<div id="modal-add-user" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><i class="fas fa-user-shield"></i> Create System User</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-user')">&times;</button>
+    </div>
+    <form onsubmit="submitAddSystemUser(event)">
+      <div class="form-group">
+        <label>Account Role</label>
+        <select id="user-role-select" class="form-control" required>
+          <option value="1">Admin</option>
+          <option value="2">Manager</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="user-username" class="form-control" required placeholder="Unique username">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="user-email" class="form-control" required placeholder="user@gmail.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="user-password" class="form-control" required placeholder="Strong password">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Create System Account</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  let employeesCache = [];
+
+  function getTodayDateString() {
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, '0');
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const y = today.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+
+  function loadAdminData() {
+    // Set default date input
+    if (!document.getElementById('att-sheet-date').value) {
+      document.getElementById('att-sheet-date').value = getTodayDateString();
+    }
+
+    fetch('/api/admin/employees')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          employeesCache = data.employees;
+          renderAdminEmployees(employeesCache);
+          renderPayrollTable(employeesCache);
+          updateAdminStats(employeesCache);
+        }
+      });
+
+    loadLeavesData();
+  }
+
+  function updateAdminStats(employees) {
+    document.getElementById('stat-total-employees').innerText = employees.length;
+    
+    let presentCount = employees.filter(e => e.present_days > 0).length;
+    document.getElementById('stat-present-today').innerText = presentCount;
+
+    let totalPay = employees.reduce((sum, e) => sum + e.final_salary, 0);
+    document.getElementById('stat-total-payroll').innerText = `$${totalPay.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+  }
+
+  function renderAdminEmployees(employees) {
+    const tbody = document.getElementById('tbody-employees');
+    tbody.innerHTML = '';
+
+    if (employees.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">No employees found.</td></tr>';
+      return;
+    }
+
+    employees.forEach(emp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>#${emp.id}</strong></td>
+        <td>${emp.name}</td>
+        <td>${emp.email}</td>
+        <td><span class="badge badge-pending">${emp.position}</span></td>
+        <td>$${emp.base_salary.toFixed(2)}</td>
+        <td>$${emp.bonus.toFixed(2)}</td>
+        <td>$${emp.deduction.toFixed(2)}</td>
+        <td><span class="badge badge-present">${emp.present_days} Days</span></td>
+        <td><strong>$${emp.final_salary.toFixed(2)}</strong></td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="openEditModal(${emp.id})"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteEmp(${emp.id})"><i class="fas fa-trash"></i></button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function filterEmployeeTable() {
+    const query = document.getElementById('employee-search-input').value.toLowerCase();
+    const filtered = employeesCache.filter(e => 
+      e.name.toLowerCase().includes(query) || 
+      e.email.toLowerCase().includes(query) || 
+      e.position.toLowerCase().includes(query) || 
+      e.id.toString().includes(query)
+    );
+    renderAdminEmployees(filtered);
+  }
+
+  // -------------------------------------------------------------------------
+  // Automated Attendance Sheet for Today or Any Date
+  // -------------------------------------------------------------------------
+  function loadAttendanceSheet() {
+    const dateInput = document.getElementById('att-sheet-date').value.trim() || getTodayDateString();
+    
+    fetch(`/api/admin/attendance/date?date=${encodeURIComponent(dateInput)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          renderAttendanceSheet(data.employees, data.date);
+        } else {
+          showToast(data.message, "error");
+        }
+      });
+  }
+
+  function renderAttendanceSheet(empList, dateStr) {
+    const tbody = document.getElementById('tbody-attendance-sheet');
+    tbody.innerHTML = '';
+
+    document.getElementById('sheet-summary-txt').innerHTML = `
+      <i class="fas fa-calendar-day" style="color: var(--accent-primary);"></i> Attendance Sheet for: <strong>${dateStr}</strong> (${empList.length} Total Employees)
+    `;
+
+    if (empList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No existing employees to display.</td></tr>';
+      return;
+    }
+
+    empList.forEach(emp => {
+      // emp.status: 1=Present, 0=Absent, null=Not recorded
+      let currentBadge = '';
+      if (emp.status === 1) {
+        currentBadge = '<span class="badge badge-present"><i class="fas fa-check"></i> Present</span>';
+      } else if (emp.status === 0) {
+        currentBadge = '<span class="badge badge-absent"><i class="fas fa-times"></i> Absent</span>';
+      } else {
+        currentBadge = '<span class="badge badge-pending"><i class="fas fa-question"></i> Not Recorded</span>';
+      }
+
+      // Default selection to 1 (Present) or current recorded status
+      let selectedStatus = (emp.status !== null) ? emp.status : 1;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>#${emp.id}</strong></td>
+        <td><strong>${emp.name}</strong></td>
+        <td>${emp.position}</td>
+        <td>${currentBadge}</td>
+        <td>
+          <input type="hidden" class="att-row-empid" value="${emp.id}">
+          <select class="form-control att-row-status" style="width: 140px; padding: 0.4rem 0.6rem;">
+            <option value="1" ${selectedStatus === 1 ? 'selected' : ''}>Present (1)</option>
+            <option value="0" ${selectedStatus === 0 ? 'selected' : ''}>Absent (0)</option>
+          </select>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function markAllAttendance(statusVal) {
+    const selects = document.querySelectorAll('.att-row-status');
+    selects.forEach(s => s.value = statusVal);
+  }
+
+  function submitBatchAttendance(e) {
+    e.preventDefault();
+    const dateStr = document.getElementById('att-sheet-date').value.trim() || getTodayDateString();
+    
+    const empIds = document.querySelectorAll('.att-row-empid');
+    const statuses = document.querySelectorAll('.att-row-status');
+
+    let records = [];
+    for (let i = 0; i < empIds.length; i++) {
+      records.push({
+        emp_id: empIds[i].value,
+        status: statuses[i].value
+      });
+    }
+
+    if (records.length === 0) {
+      showToast("No employees in attendance sheet.", "error");
+      return;
+    }
+
+    fetch('/api/admin/attendance/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: dateStr,
+        records: records
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        loadAttendanceSheet();
+        loadAdminData(); // Refresh summary stats
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function renderPayrollTable(employees) {
+    const tbody = document.getElementById('tbody-payroll');
+    tbody.innerHTML = '';
+
+    employees.forEach(emp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>#${emp.id}</td>
+        <td>${emp.name}</td>
+        <td>${emp.position}</td>
+        <td>$${emp.base_salary.toFixed(2)}</td>
+        <td>${emp.present_days}</td>
+        <td style="color: var(--color-success); font-weight:600;">+$${emp.bonus.toFixed(2)}</td>
+        <td style="color: var(--color-danger); font-weight:600;">-$${emp.deduction.toFixed(2)}</td>
+        <td><strong style="color: var(--color-success); font-size: 1.05rem;">$${emp.final_salary.toFixed(2)}</strong></td>
+        <td>
+          <button class="btn btn-sm btn-success" onclick="openAdjustModal(${emp.id}, 'bonus')">+ Bonus</button>
+          <button class="btn btn-sm btn-danger" onclick="openAdjustModal(${emp.id}, 'deduction')">+ Deduction</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function loadLeavesData() {
+    fetch('/api/manager/leaves/pending')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const tbody = document.getElementById('tbody-admin-leaves');
+          tbody.innerHTML = '';
+
+          let pendingCount = 0;
+          data.leaves.forEach(l => {
+            if (l.status === 0) pendingCount++;
+            let badgeClass = l.status === 1 ? 'badge-approved' : (l.status === 2 ? 'badge-rejected' : 'badge-pending');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${l.apply_date}</td>
+              <td><strong>${l.employee_name}</strong> (#${l.emp_id})</td>
+              <td>${l.from_date}</td>
+              <td>${l.to_date}</td>
+              <td>${l.reason}</td>
+              <td><span class="badge ${badgeClass}">${l.status_name}</span></td>
+              <td>
+                ${l.status === 0 ? `
+                  <button class="btn btn-sm btn-success" onclick="processLeave(${l.id}, 1)">Approve</button>
+                  <button class="btn btn-sm btn-danger" onclick="processLeave(${l.id}, 2)">Reject</button>
+                ` : '-'}
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.getElementById('stat-pending-leaves').innerText = pendingCount;
+        }
+      });
+  }
+
+  function processLeave(leaveId, action) {
+    fetch('/api/manager/leaves/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leave_id: leaveId, action: action })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        loadLeavesData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function submitAddEmployee(e) {
+    e.preventDefault();
+    const payload = {
+      name: document.getElementById('add-emp-name').value,
+      email: document.getElementById('add-emp-email').value,
+      date_of_birth: document.getElementById('add-emp-dob').value,
+      position: document.getElementById('add-emp-pos').value,
+      base_salary: document.getElementById('add-emp-salary').value,
+      password: document.getElementById('add-emp-password').value
+    };
+
+    fetch('/api/admin/employee/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        closeModal('modal-add-employee');
+        loadAdminData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function openEditModal(empId) {
+    const emp = employeesCache.find(e => e.id === empId);
+    if (!emp) return;
+
+    document.getElementById('edit-emp-id').value = emp.id;
+    document.getElementById('edit-emp-name').value = emp.name;
+    document.getElementById('edit-emp-email').value = emp.email;
+    document.getElementById('edit-emp-dob').value = emp.date_of_birth;
+    document.getElementById('edit-emp-pos').value = emp.position;
+    document.getElementById('edit-emp-salary').value = emp.base_salary;
+
+    openModal('modal-edit-employee');
+  }
+
+  function submitUpdateEmployee(e) {
+    e.preventDefault();
+    const payload = {
+      id: document.getElementById('edit-emp-id').value,
+      name: document.getElementById('edit-emp-name').value,
+      email: document.getElementById('edit-emp-email').value,
+      date_of_birth: document.getElementById('edit-emp-dob').value,
+      position: document.getElementById('edit-emp-pos').value,
+      base_salary: document.getElementById('edit-emp-salary').value
+    };
+
+    fetch('/api/admin/employee/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        closeModal('modal-edit-employee');
+        loadAdminData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function deleteEmp(empId) {
+    if (!confirm(`Are you sure you want to delete Employee #${empId}? This will also clear attendance history.`)) return;
+
+    fetch('/api/admin/employee/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: empId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        loadAdminData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function openAdjustModal(empId, type) {
+    document.getElementById('adjust-emp-id').value = empId;
+    document.getElementById('adjust-type').value = type;
+    document.getElementById('adjust-modal-title').innerHTML = `<i class="fas fa-plus-circle"></i> Add ${type.toUpperCase()}`;
+    document.getElementById('adjust-label').innerText = `${type.toUpperCase()} Amount ($)`;
+    openModal('modal-adjust-payroll');
+  }
+
+  function submitPayrollAdjustment(e) {
+    e.preventDefault();
+    const empId = document.getElementById('adjust-emp-id').value;
+    const type = document.getElementById('adjust-type').value;
+    const val = document.getElementById('adjust-amount').value;
+
+    const endpoint = type === 'bonus' ? '/api/admin/payroll/bonus' : '/api/admin/payroll/deduction';
+    const payload = { emp_id: empId };
+    payload[type] = val;
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        closeModal('modal-adjust-payroll');
+        loadAdminData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function submitAddSystemUser(e) {
+    e.preventDefault();
+    const payload = {
+      role: document.getElementById('user-role-select').value,
+      username: document.getElementById('user-username').value,
+      email: document.getElementById('user-email').value,
+      password: document.getElementById('user-password').value
+    };
+
+    fetch('/api/admin/users/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        closeModal('modal-add-user');
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', loadAdminData);
+</script>
+{% endblock %}

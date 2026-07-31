@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Manager Dashboard - EMS NEXUS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <h1><i class="fas fa-user-tie" style="color: var(--role-manager);"></i> Manager Portal</h1>
+    <p>Logged in as Manager: {{ user.username }}. Oversee staff activities, attendance, and leave approvals.</p>
+  </div>
+  <div>
+    <button class="btn btn-secondary" onclick="openModal('modal-change-password')">
+      <i class="fas fa-key"></i> Change Password
+    </button>
+  </div>
+</div>
+
+<!-- Stat Grid -->
+<div class="stat-grid">
+  <div class="glass-card stat-card">
+    <div class="stat-icon emerald"><i class="fas fa-users"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="mgr-stat-total-emp">0</div>
+      <div class="stat-label">Team Members</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon amber"><i class="fas fa-umbrella-beach"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="mgr-stat-pending-leaves">0</div>
+      <div class="stat-label">Pending Leave Requests</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon cyan"><i class="fas fa-user-check"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="mgr-stat-present-today">0</div>
+      <div class="stat-label">Present Today</div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Activity Updates Stream Box -->
+<div class="live-stream-box">
+  <div class="live-header">
+    <div class="live-indicator">
+      <div class="pulse-dot"></div>
+      <span>Live Employee Activities Stream</span>
+    </div>
+    <span style="font-size: 0.75rem; color: var(--text-muted);"><i class="fas fa-sync fa-spin"></i> Live update stream</span>
+  </div>
+  <div id="live-updates-list" class="live-list">
+    <div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem;">Connecting to live stream...</div>
+  </div>
+</div>
+
+<!-- Tab Container -->
+<div class="tab-container">
+  <button class="tab-btn active" onclick="switchTab('mgr-tab-leaves', this)">
+    <i class="fas fa-clock-rotate-left"></i> Leave Approvals
+  </button>
+  <button class="tab-btn" onclick="switchTab('mgr-tab-directory', this)">
+    <i class="fas fa-address-book"></i> Team Directory
+  </button>
+  <button class="tab-btn" onclick="switchTab('mgr-tab-payroll', this)">
+    <i class="fas fa-file-invoice"></i> Payroll Overview
+  </button>
+</div>
+
+<!-- TAB 1: Leave Requests Portal -->
+<div id="mgr-tab-leaves" class="tab-content active">
+  <div class="glass-card">
+    <h3><i class="fas fa-umbrella-beach"></i> Pending & Recent Leave Requests</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 1.25rem; font-size: 0.9rem;">Review and manage employee leave applications</p>
+
+    <div class="table-responsive">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Apply Date</th>
+            <th>Employee</th>
+            <th>Leave Dates</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="mgr-tbody-leaves">
+          <tr><td colspan="6" style="text-align:center;">Loading leave requests...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: Team Directory -->
+<div id="mgr-tab-directory" class="tab-content">
+  <div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3><i class="fas fa-users"></i> Staff Directory & Search</h3>
+      <input type="text" id="mgr-search-input" class="form-control" style="width: 250px;" placeholder="Search employee..." onkeyup="filterMgrTable()">
+    </div>
+
+    <div class="table-responsive">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Position</th>
+            <th>Present Days</th>
+            <th>Base Salary</th>
+          </tr>
+        </thead>
+        <tbody id="mgr-tbody-employees">
+          <tr><td colspan="6" style="text-align:center;">Loading staff records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: Payroll Overview -->
+<div id="mgr-tab-payroll" class="tab-content">
+  <div class="glass-card">
+    <h3><i class="fas fa-calculator"></i> Calculated Payroll Overview</h3>
+    <div class="table-responsive" style="margin-top: 1rem;">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Position</th>
+            <th>Base Salary</th>
+            <th>Present Days</th>
+            <th>Bonus</th>
+            <th>Deduction</th>
+            <th>Net Calculated Salary</th>
+          </tr>
+        </thead>
+        <tbody id="mgr-tbody-payroll">
+          <tr><td colspan="8" style="text-align:center;">Loading payroll...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  let mgrEmpCache = [];
+
+  function loadManagerData() {
+    // 1. Load Employees
+    fetch('/api/admin/employees')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          mgrEmpCache = data.employees;
+          renderMgrEmployees(mgrEmpCache);
+          renderMgrPayroll(mgrEmpCache);
+
+          document.getElementById('mgr-stat-total-emp').innerText = mgrEmpCache.length;
+          let presentCount = mgrEmpCache.filter(e => e.present_days > 0).length;
+          document.getElementById('mgr-stat-present-today').innerText = presentCount;
+        }
+      });
+
+    // 2. Load Leaves
+    loadMgrLeaves();
+  }
+
+  function renderMgrEmployees(list) {
+    const tbody = document.getElementById('mgr-tbody-employees');
+    tbody.innerHTML = '';
+
+    list.forEach(emp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>#${emp.id}</strong></td>
+        <td>${emp.name}</td>
+        <td>${emp.email}</td>
+        <td><span class="badge badge-pending">${emp.position}</span></td>
+        <td><span class="badge badge-present">${emp.present_days} Days</span></td>
+        <td>$${emp.base_salary.toFixed(2)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function filterMgrTable() {
+    const q = document.getElementById('mgr-search-input').value.toLowerCase();
+    const filtered = mgrEmpCache.filter(e => 
+      e.name.toLowerCase().includes(q) || 
+      e.email.toLowerCase().includes(q) || 
+      e.position.toLowerCase().includes(q) || 
+      e.id.toString().includes(q)
+    );
+    renderMgrEmployees(filtered);
+  }
+
+  function renderMgrPayroll(list) {
+    const tbody = document.getElementById('mgr-tbody-payroll');
+    tbody.innerHTML = '';
+
+    list.forEach(emp => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>#${emp.id}</td>
+        <td>${emp.name}</td>
+        <td>${emp.position}</td>
+        <td>$${emp.base_salary.toFixed(2)}</td>
+        <td>${emp.present_days}</td>
+        <td style="color: var(--color-success); font-weight:600;">+$${emp.bonus.toFixed(2)}</td>
+        <td style="color: var(--color-danger); font-weight:600;">-$${emp.deduction.toFixed(2)}</td>
+        <td><strong style="color: var(--color-success); font-size: 1.05rem;">$${emp.final_salary.toFixed(2)}</strong></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function loadMgrLeaves() {
+    fetch('/api/manager/leaves/pending')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const tbody = document.getElementById('mgr-tbody-leaves');
+          tbody.innerHTML = '';
+
+          let pendingCount = 0;
+          data.leaves.forEach(l => {
+            if (l.status === 0) pendingCount++;
+            let badgeClass = l.status === 1 ? 'badge-approved' : (l.status === 2 ? 'badge-rejected' : 'badge-pending');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${l.apply_date}</td>
+              <td><strong>${l.employee_name}</strong> (#${l.emp_id})</td>
+              <td>${l.from_date} &rarr; ${l.to_date}</td>
+              <td>${l.reason}</td>
+              <td><span class="badge ${badgeClass}">${l.status_name}</span></td>
+              <td>
+                ${l.status === 0 ? `
+                  <button class="btn btn-sm btn-success" onclick="mgrActionLeave(${l.id}, 1)">Approve</button>
+                  <button class="btn btn-sm btn-danger" onclick="mgrActionLeave(${l.id}, 2)">Reject</button>
+                ` : '-'}
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.getElementById('mgr-stat-pending-leaves').innerText = pendingCount;
+        }
+      });
+  }
+
+  function mgrActionLeave(leaveId, action) {
+    fetch('/api/manager/leaves/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leave_id: leaveId, action: action })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        loadMgrLeaves();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', loadManagerData);
+</script>
+{% endblock %}

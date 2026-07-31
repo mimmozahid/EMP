@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Dashboard - EMS NEXUS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">
+    <h1><i class="fas fa-id-badge" style="color: var(--role-employee);"></i> Employee Workspace</h1>
+    <p>Logged in as: <strong id="emp-header-name">{{ user.username }}</strong> (ID: #{{ user.emp_id }})</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    <button class="btn btn-secondary" onclick="openModal('modal-update-profile')">
+      <i class="fas fa-user-pen"></i> Update Profile
+    </button>
+    <button class="btn btn-secondary" onclick="openModal('modal-change-password')">
+      <i class="fas fa-key"></i> Change Password
+    </button>
+  </div>
+</div>
+
+<!-- Attendance Stat Cards -->
+<div class="stat-grid">
+  <div class="glass-card stat-card">
+    <div class="stat-icon cyan"><i class="fas fa-calendar-check"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="emp-stat-present">0</div>
+      <div class="stat-label">Days Present</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon purple"><i class="fas fa-fire"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="emp-stat-streak">0 Days</div>
+      <div class="stat-label">Attendance Streak</div>
+    </div>
+  </div>
+  <div class="glass-card stat-card">
+    <div class="stat-icon emerald"><i class="fas fa-wallet"></i></div>
+    <div class="stat-info">
+      <div class="stat-value" id="emp-stat-salary">$0.00</div>
+      <div class="stat-label">Calculated Net Salary</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-container">
+  <button class="tab-btn active" onclick="switchTab('emp-tab-attendance', this)">
+    <i class="fas fa-fingerprint"></i> Attendance Center
+  </button>
+  <button class="tab-btn" onclick="switchTab('emp-tab-leave', this)">
+    <i class="fas fa-paper-plane"></i> Apply For Leave
+  </button>
+  <button class="tab-btn" onclick="switchTab('emp-tab-profile', this)">
+    <i class="fas fa-id-card"></i> My Profile & Compensation
+  </button>
+</div>
+
+<!-- TAB 1: Modern Attendance Center Vibe -->
+<div id="emp-tab-attendance" class="tab-content active">
+  <div class="glass-card attendance-hero">
+    <h2 style="font-size: 1.6rem; margin-bottom: 0.25rem;"><i class="fas fa-shield-heart" style="color: var(--role-employee);"></i> Modern Attendance Center</h2>
+    <p style="color: var(--text-secondary); font-size: 0.95rem;" id="att-today-text">Today's Date: Loading...</p>
+
+    <!-- 1-Click Biometric Pulse Check-in Button -->
+    <div class="checkin-ring-container">
+      <div class="pulse-ring-effect" id="pulse-effect"></div>
+      <button id="btn-checkin" class="btn-checkin-pulse" onclick="triggerCheckIn()">
+        <i class="fas fa-fingerprint"></i>
+        <span id="btn-checkin-label">CHECK IN</span>
+      </button>
+    </div>
+
+    <div id="checkin-status-msg" style="font-weight: 600; color: var(--color-success); font-size: 1.05rem;">
+      <i class="fas fa-info-circle"></i> Click to record present status for today
+    </div>
+  </div>
+
+  <div class="glass-card" style="margin-top: 1.5rem;">
+    <h3><i class="fas fa-history"></i> My Attendance Log History</h3>
+    <div class="table-responsive" style="margin-top: 1rem;">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-emp-att">
+          <tr><td colspan="2" style="text-align:center;">Loading attendance log...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: Apply For Leave -->
+<div id="emp-tab-leave" class="tab-content">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+    
+    <div class="glass-card">
+      <h3><i class="fas fa-plane-departure"></i> Apply For Leave</h3>
+      <p style="color: var(--text-secondary); margin-bottom: 1.25rem; font-size: 0.9rem;">Submit leave application for manager approval</p>
+      
+      <form onsubmit="submitLeaveApplication(event)">
+        <div class="form-group">
+          <label>Leave From Date (DD/MM/YYYY)</label>
+          <input type="text" id="leave-from" class="form-control" required placeholder="05/08/2026">
+        </div>
+        <div class="form-group">
+          <label>Leave To Date (DD/MM/YYYY)</label>
+          <input type="text" id="leave-to" class="form-control" required placeholder="10/08/2026">
+        </div>
+        <div class="form-group">
+          <label>Reason for Leave</label>
+          <textarea id="leave-reason" class="form-control" rows="4" required placeholder="Provide reason for leave request..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="fas fa-paper-plane"></i> Submit Application</button>
+      </form>
+    </div>
+
+    <div class="glass-card">
+      <h3><i class="fas fa-clock-rotate-left"></i> My Leave Status</h3>
+      <div class="table-responsive" style="margin-top: 1rem;">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>Apply Date</th>
+              <th>Period</th>
+              <th>Reason</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-emp-leaves">
+            <tr><td colspan="4" style="text-align:center;">Loading leave status...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- TAB 3: Profile & Compensation -->
+<div id="emp-tab-profile" class="tab-content">
+  <div class="glass-card" style="max-width: 650px; margin: 0 auto;">
+    <div style="display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
+      <div style="width: 70px; height: 70px; border-radius: 50%; background: var(--role-employee-gradient); display: flex; align-items: center; justify-content: center; font-size: 2rem; color: #fff; box-shadow: 0 0 25px rgba(6, 182, 212, 0.4);">
+        <i class="fas fa-user font"></i>
+      </div>
+      <div>
+        <h2 id="prof-card-name">Employee Name</h2>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;" id="prof-card-pos">Position</p>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; font-size: 0.95rem;">
+      <div>
+        <span style="color: var(--text-secondary);">Employee ID:</span>
+        <strong id="prof-id" style="display: block; font-size: 1.1rem; color: var(--text-primary);">#0</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Email:</span>
+        <strong id="prof-email" style="display: block; color: var(--text-primary);">email@domain.com</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Date of Birth:</span>
+        <strong id="prof-dob" style="display: block; color: var(--text-primary);">DD/MM/YYYY</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Base Salary:</span>
+        <strong id="prof-salary" style="display: block; color: var(--text-primary);">$0.00</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Current Bonus:</span>
+        <strong id="prof-bonus" style="display: block; color: var(--color-success);">+$0.00</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Current Deduction:</span>
+        <strong id="prof-deduction" style="display: block; color: var(--color-danger);">-$0.00</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Present Days:</span>
+        <strong id="prof-present" style="display: block; color: var(--text-primary);">0 Days</strong>
+      </div>
+      <div>
+        <span style="color: var(--text-secondary);">Final Salary Net:</span>
+        <strong id="prof-final-salary" style="display: block; font-size: 1.2rem; color: var(--color-success);">$0.00</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Update Profile -->
+<div id="modal-update-profile" class="modal-backdrop">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3><i class="fas fa-user-pen"></i> Update Profile Details</h3>
+      <button class="modal-close" onclick="closeModal('modal-update-profile')">&times;</button>
+    </div>
+    <form onsubmit="submitUpdateProfile(event)">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="up-name" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Email (must end with @gmail.com or @diu.edu.bd)</label>
+        <input type="email" id="up-email" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label>Date of Birth (DD/MM/YYYY)</label>
+        <input type="text" id="up-dob" class="form-control" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Save Profile Changes</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  let empProfileData = null;
+
+  function loadEmployeeData() {
+    // 1. Profile
+    fetch('/api/employee/profile')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          empProfileData = data.profile;
+          renderProfileCard(empProfileData);
+        }
+      });
+
+    // 2. Attendance & Check-in status
+    loadEmpAttendance();
+
+    // 3. Leave Status
+    loadEmpLeaves();
+  }
+
+  function renderProfileCard(p) {
+    document.getElementById('emp-header-name').innerText = p.name;
+    document.getElementById('prof-card-name').innerText = p.name;
+    document.getElementById('prof-card-pos').innerText = p.position;
+    document.getElementById('prof-id').innerText = `#${p.id}`;
+    document.getElementById('prof-email').innerText = p.email;
+    document.getElementById('prof-dob').innerText = p.date_of_birth;
+    document.getElementById('prof-salary').innerText = `$${p.base_salary.toFixed(2)}`;
+    document.getElementById('prof-bonus').innerText = `+$${p.bonus.toFixed(2)}`;
+    document.getElementById('prof-deduction').innerText = `-$${p.deduction.toFixed(2)}`;
+    document.getElementById('prof-present').innerText = `${p.present_days} Days`;
+    document.getElementById('prof-final-salary').innerText = `$${p.final_salary.toFixed(2)}`;
+    
+    document.getElementById('emp-stat-present').innerText = p.present_days;
+    document.getElementById('emp-stat-salary').innerText = `$${p.final_salary.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+
+    // Fill update profile modal
+    document.getElementById('up-name').value = p.name;
+    document.getElementById('up-email').value = p.email;
+    document.getElementById('up-dob').value = p.date_of_birth;
+  }
+
+  function loadEmpAttendance() {
+    fetch('/api/employee/attendance')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('att-today-text').innerText = `Today's Date: ${data.today_date}`;
+          document.getElementById('emp-stat-streak').innerText = `${data.streak} Days`;
+
+          const btn = document.getElementById('btn-checkin');
+          const btnLabel = document.getElementById('btn-checkin-label');
+          const statusMsg = document.getElementById('checkin-status-msg');
+          const pulseEffect = document.getElementById('pulse-effect');
+
+          if (data.checked_in_today) {
+            btn.disabled = true;
+            btnLabel.innerText = "CHECKED IN";
+            statusMsg.innerHTML = `<i class="fas fa-check-circle" style="color: var(--color-success);"></i> You are marked Present for today (${data.today_date})`;
+            if (pulseEffect) pulseEffect.style.display = 'none';
+          } else {
+            btn.disabled = false;
+            btnLabel.innerText = "CHECK IN";
+            statusMsg.innerHTML = `<i class="fas fa-info-circle"></i> Click to record present status for today`;
+            if (pulseEffect) pulseEffect.style.display = 'block';
+          }
+
+          // History log table
+          const tbody = document.getElementById('tbody-emp-att');
+          tbody.innerHTML = '';
+          if (data.records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No attendance records found.</td></tr>';
+          } else {
+            data.records.forEach(r => {
+              const tr = document.createElement('tr');
+              let badgeClass = r.status === 1 ? 'badge-present' : 'badge-absent';
+              tr.innerHTML = `
+                <td>${r.date}</td>
+                <td><span class="badge ${badgeClass}">${r.status_name}</span></td>
+              `;
+              tbody.appendChild(tr);
+            });
+          }
+        }
+      });
+  }
+
+  function triggerCheckIn() {
+    fetch('/api/employee/attendance/checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        loadEmployeeData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function submitLeaveApplication(e) {
+    e.preventDefault();
+    const payload = {
+      from_date: document.getElementById('leave-from').value.trim(),
+      to_date: document.getElementById('leave-to').value.trim(),
+      reason: document.getElementById('leave-reason').value.trim()
+    };
+
+    fetch('/api/employee/leave/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        document.getElementById('leave-from').value = '';
+        document.getElementById('leave-to').value = '';
+        document.getElementById('leave-reason').value = '';
+        loadEmpLeaves();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  function loadEmpLeaves() {
+    fetch('/api/employee/leave/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const tbody = document.getElementById('tbody-emp-leaves');
+          tbody.innerHTML = '';
+
+          if (data.leaves.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No leave requests found.</td></tr>';
+          } else {
+            data.leaves.forEach(l => {
+              let badgeClass = l.status === 1 ? 'badge-approved' : (l.status === 2 ? 'badge-rejected' : 'badge-pending');
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${l.apply_date}</td>
+                <td>${l.from_date} &rarr; ${l.to_date}</td>
+                <td>${l.reason}</td>
+                <td><span class="badge ${badgeClass}">${l.status_name}</span></td>
+              `;
+              tbody.appendChild(tr);
+            });
+          }
+        }
+      });
+  }
+
+  function submitUpdateProfile(e) {
+    e.preventDefault();
+    const payload = {
+      name: document.getElementById('up-name').value,
+      email: document.getElementById('up-email').value,
+      date_of_birth: document.getElementById('up-dob').value
+    };
+
+    fetch('/api/employee/profile/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(data.message, "success");
+        closeModal('modal-update-profile');
+        loadEmployeeData();
+      } else {
+        showToast(data.message, "error");
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', loadEmployeeData);
+</script>
+{% endblock %}
