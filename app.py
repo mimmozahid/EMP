@@ -25,10 +25,14 @@ if not db_url and tidb_host and tidb_user and tidb_password and tidb_database:
     db_url = f"mysql+pymysql://{tidb_user}:{tidb_password}@{tidb_host}:{tidb_port}/{tidb_database}{ssl_query}"
 
 if not db_url:
-    # Local fallback sqlite database
-    db_file = os.path.join(app.root_path, 'employee_system.db')
+    # Use writable /tmp directory on Vercel/serverless environments
+    if os.environ.get('VERCEL'):
+        db_file = '/tmp/employee_system.db'
+    else:
+        db_file = os.path.join(app.root_path, 'employee_system.db')
+        
     db_url = f"sqlite:///{db_file}"
-    print(f"Using local SQLite database: {db_file}")
+    print(f"Using SQLite database: {db_file}")
 else:
     print("Using TiDB MySQL database connection.")
 
@@ -44,9 +48,13 @@ from seed import seed_database
 
 db.init_app(app)
 
-# Initialize database and seed data
+# Initialize database safely on startup
 with app.app_context():
-    seed_database(app)
+    try:
+        db.create_all()
+        seed_database(app)
+    except Exception as e:
+        print(f"Database initialization warning: {e}")
 
 # Helper function to get present days for an employee
 def count_present_days(emp_id):
