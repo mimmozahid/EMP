@@ -135,6 +135,7 @@ def current_user():
 # ---------------------------------------------------------------------------
 @app.route('/')
 @app.route('/login')
+@app.route('/api/index')
 def login_page():
     user = current_user()
     if user:
