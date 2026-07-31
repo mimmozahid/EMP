@@ -622,13 +622,36 @@
 
   function submitAddEmployee(e) {
     e.preventDefault();
+    const name = document.getElementById('add-emp-name').value.trim();
+    const email = document.getElementById('add-emp-email').value.trim();
+    const dob = document.getElementById('add-emp-dob').value.trim();
+    const position = document.getElementById('add-emp-pos').value.trim();
+    const salary = document.getElementById('add-emp-salary').value.trim();
+    const password = document.getElementById('add-emp-password').value.trim();
+
+    if (!name) {
+      showToast("Please enter the Full Name.", "error");
+      document.getElementById('add-emp-name').focus();
+      return;
+    }
+    if (!position) {
+      showToast("Please enter the Job Position.", "error");
+      document.getElementById('add-emp-pos').focus();
+      return;
+    }
+    if (!salary) {
+      showToast("Please enter the Base Salary.", "error");
+      document.getElementById('add-emp-salary').focus();
+      return;
+    }
+
     const payload = {
-      name: document.getElementById('add-emp-name').value,
-      email: document.getElementById('add-emp-email').value,
-      date_of_birth: document.getElementById('add-emp-dob').value,
-      position: document.getElementById('add-emp-pos').value,
-      base_salary: document.getElementById('add-emp-salary').value,
-      password: document.getElementById('add-emp-password').value
+      name: name,
+      email: email,
+      date_of_birth: dob,
+      position: position,
+      base_salary: salary,
+      password: password
     };
 
     fetch('/api/admin/employee/add', {

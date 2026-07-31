@@ -494,6 +494,11 @@ a:hover {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
+.form-control::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-style: italic;
+}
+
 /* Modern Attendance Center Vibe */
 .attendance-hero {
   display: flex;
